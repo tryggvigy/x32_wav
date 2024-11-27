@@ -1,4 +1,8 @@
+Note from Tryggvi:
+Below is the original tutorial on how to run this old python script.
+This is not a README for how to run the Rust version.
 
+-----------------
 
 #
 Python must be installed on the computer!!
@@ -8,7 +12,7 @@ Python must be installed on the computer!!
 1.- Copy Session folder (e.g. 4ADC5F3B) from SD card into the computer
 2.- Copy the "xlive_lib" folder into the session folder"
 3.- Open a command prompt and navigate to the session folder
-4.- Star the python interpreter by typing 
+4.- Star the python interpreter by typing
 	>python
 
 5.- Python interpreter is started.  Import the xlive_lib  by typing
@@ -71,7 +75,7 @@ Python must be installed on the computer!!
 1.- Create a folder and copy the audio files in it
 2.- Copy the "xlive_lib" folder inside the folder containing the audio files
 3.- Open a command prompt and navigate to the session folder
-4.- Star the python interpreter by typing 
+4.- Star the python interpreter by typing
 	>python
 
 5.- Python interpreter is started.  Import the xlive_lib  by typing
