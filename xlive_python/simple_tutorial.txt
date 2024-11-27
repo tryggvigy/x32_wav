@@ -1,0 +1,85 @@
+
+
+#
+Python must be installed on the computer!!
+
+
+# General steps for extracting audio of an X-LIVE session
+1.- Copy Session folder (e.g. 4ADC5F3B) from SD card into the computer
+2.- Copy the "xlive_lib" folder into the session folder"
+3.- Open a command prompt and navigate to the session folder
+4.- Star the python interpreter by typing 
+	>python
+
+5.- Python interpreter is started.  Import the xlive_lib  by typing
+	>>>  from xlive_lib import *
+
+
+#name a session  max 19 characters
+6.- type:
+	>>> nameSession("hello world")
+
+#get session info
+6.- type:
+	>>> getSessionInfo()
+
+#Extract all audio channels of an X-LIVE session
+6.- type:
+	>>> extractSession()
+
+
+#Extract all audio channels of an X-LIVE session of user define time span from 0 sec to 120sec
+6.- type:
+	>>> extractSessiontime(0,120)
+
+
+#Extract all audio channels of an X-LIVE session from marker x to marker y
+6.- get session info to find out the markers list and their index:
+	>>> getSessionInfo()
+	>>> extractSessionMarker(1,2)
+
+
+#Extract a single channel of an X-LIVE session, e.g. channel 3
+6.- type:
+	>>> extractChannel(3)
+
+
+#Extract a single channel of an X-LIVE session of user define time span from 0 sec to 120sec, e.g. channel 3
+6.- type:
+	>>> extractChanneltime(3,120)
+
+
+#Extract a single channel of an X-LIVE session from marker x to marker y  , e.g. channel 3
+6.- get session info to find out the markers list and their index:
+	>>> getSessionInfo()
+	>>> extractChannelMarker(3,1,2)
+
+####
+
+# create an X-live session out of single channels
+#Requirements
+- Audio files must be uncompressed WAV file
+	- one audio channel per file
+	- all the same sample rate:  48000 or 441000
+	- all must be 24 bit PCM coded
+
+- Files must be named ch_1 to ch_32
+- The number of audio files can be from 1 to 32, the function would calculate the required channels and fill the none used ones
+
+
+# steps
+1.- Create a folder and copy the audio files in it
+2.- Copy the "xlive_lib" folder inside the folder containing the audio files
+3.- Open a command prompt and navigate to the session folder
+4.- Star the python interpreter by typing 
+	>python
+
+5.- Python interpreter is started.  Import the xlive_lib  by typing
+	>>>  from xlive_lib import *
+
+6.- 2 parameter are need, a string of max 19 characters as a session name, and a list of markers
+	for not markers type:
+	>>> createSession("Hello World",[])
+
+	for marker, markers are given in seconds
+	>>> createSession("Hello World",[10.5,120.8,130])

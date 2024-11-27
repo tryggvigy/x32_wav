@@ -1,0 +1,10 @@
+[package]
+name = "x32_wav"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[lib]
+name = "x32_wav"
+path = "src/lib.rs"
