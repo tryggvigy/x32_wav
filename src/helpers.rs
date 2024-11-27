@@ -1,6 +1,5 @@
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom, Write};
-use std::path::Path;
 
 pub fn read_log_file() -> io::Result<(
     String,
@@ -178,7 +177,7 @@ pub fn read_write_audio(
         take.read_exact(&mut read_buf)?;
         for j in 0..no_channels {
             let mut ch_buffer = Vec::new();
-            for k in (0..bufsize).step_by((no_channels * 4) as usize) {
+            for _k in (0..bufsize).step_by((no_channels * 4) as usize) {
                 ch_buffer.extend_from_slice(&read_buf[(j * 4 + 1) as usize..(j * 4 + 4) as usize]);
             }
             waves_to[j as usize].write_all(&ch_buffer)?;
@@ -213,7 +212,7 @@ pub fn read_write_audio_ch(
         for j in 0..no_channels {
             if j == channel_no - 1 {
                 let mut ch_buffer = Vec::new();
-                for k in (0..bufsize).step_by((no_channels * 4) as usize) {
+                for _k in (0..bufsize).step_by((no_channels * 4) as usize) {
                     ch_buffer
                         .extend_from_slice(&read_buf[(j * 4 + 1) as usize..(j * 4 + 4) as usize]);
                 }
@@ -228,7 +227,7 @@ pub fn read_write_audio_ch(
     for j in 0..no_channels {
         if j == channel_no - 1 {
             let mut ch_buffer = Vec::new();
-            for k in (0..buf_size_rest).step_by((no_channels * 4) as usize) {
+            for _k in (0..buf_size_rest).step_by((no_channels * 4) as usize) {
                 ch_buffer.extend_from_slice(&read_buf[(j * 4 + 1) as usize..(j * 4 + 4) as usize]);
             }
             wave_to.write_all(&ch_buffer)?;
