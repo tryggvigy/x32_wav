@@ -6,7 +6,6 @@ use clap::{Arg, Command};
 fn main() {
     let matches = Command::new("X-LIVE Audio Extractor")
         .version("1.0")
-        .author("Your Name <your.email@example.com>")
         .about("Extracts audio from X-LIVE sessions")
         .subcommand(
             Command::new("nameSession").about("Names the session").arg(

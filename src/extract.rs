@@ -1,15 +1,15 @@
 use crate::helpers::*;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Seek, Write};
+use std::io::{Read, Result, Seek, SeekFrom, Write};
 use std::time::Instant;
 
-pub fn name_session(name_str: &str) -> io::Result<()> {
-    let mut log = match File::open("se_log.bin") {
-        Ok(file) => file,
-        Err(_) => {
-            println!("log file not found!");
-            return Ok(());
-        }
+// TODO not working properly
+pub fn name_session(name_str: &str) -> Result<()> {
+    let mut log = if let Ok(file) = File::open("se_log.bin") {
+        file
+    } else {
+        println!("log file not found!");
+        return Ok(());
     };
 
     let mut log_copy = Vec::new();
@@ -19,14 +19,15 @@ pub fn name_session(name_str: &str) -> io::Result<()> {
     let name_p = 4 * 388;
     let name_len = name_str.len();
 
-    for i in 0..19 {
-        if i < name_len {
-            log_copy_l[name_p + i] = name_str.as_bytes()[i];
-        } else {
-            log_copy_l[name_p + i] = 0;
-        }
+    // Copy the name into the log file, up to 19 characters
+    for (i, &byte) in name_str.as_bytes().iter().enumerate().take(19) {
+        log_copy_l[name_p + i] = byte;
     }
-
+    // Pad the rest of the name with 0 if it's less than 19 characters
+    for i in name_len..19 {
+        log_copy_l[name_p + i] = 0;
+    }
+    // null terminate the string
     log_copy_l[name_p + 19] = 0;
 
     let mut log = OpenOptions::new().write(true).open("se_log.bin")?;
@@ -35,69 +36,56 @@ pub fn name_session(name_str: &str) -> io::Result<()> {
     Ok(())
 }
 
-pub fn get_session_info() -> io::Result<()> {
-    let (
-        _session_str,
-        _session_no,
-        no_channels,
-        sample_rate,
-        _date_code,
-        no_takes,
-        no_markers,
-        total_length,
-        _take_size,
-        take_markers,
-    ) = read_log_file()?;
-    if no_channels == 0 || sample_rate == 0 {
+pub fn get_session_info() -> Result<()> {
+    let log_data = read_log_file()?;
+    if log_data.no_channels == 0 || log_data.sample_rate == 0 {
         return Ok(());
     }
 
-    let total_length_bytes = total_length * 4;
+    let total_length_bytes = log_data.total_length * 4;
 
-    println!("no_channels = {}", no_channels);
-    println!("sample_rate = {}", sample_rate);
-    println!("no_takes = {}", no_takes);
-    println!("no_markers = {}", no_markers);
+    println!("session_str = {}", log_data.session_str);
+    println!("no_channels = {}", log_data.no_channels);
+    println!("sample_rate = {}", log_data.sample_rate);
+    println!("no_takes = {}", log_data.no_takes);
+    println!("no_markers = {}", log_data.no_markers);
     println!("Total audio length in bytes = {}", total_length_bytes);
-    println!("Total audio samples per channel = {}", total_length);
+    println!(
+        "Total audio samples per channel = {}",
+        log_data.total_length
+    );
     println!(
         "Total audio time per channel = {}",
-        total_length / sample_rate
+        log_data.total_length / log_data.sample_rate
     );
 
-    for i in 0..no_markers {
+    for (i, &marker) in log_data
+        .take_markers
+        .iter()
+        .enumerate()
+        .take(log_data.no_markers as usize)
+    {
         println!(
             "Marker {} at {} samples or {} seconds",
             i,
-            take_markers[i as usize],
-            take_markers[i as usize] / sample_rate
+            marker,
+            marker / log_data.sample_rate
         );
     }
     Ok(())
 }
 
-pub fn extract_session() -> io::Result<()> {
+pub fn extract_session() -> Result<()> {
     let start = Instant::now();
 
-    let (
-        session_str,
-        _session_no,
-        no_channels,
-        sample_rate,
-        _date_code,
-        no_takes,
-        _no_markers,
-        total_length,
-        take_size,
-        _take_markers,
-    ) = read_log_file()?;
-    if no_channels == 0 || sample_rate == 0 {
+    let log_data = read_log_file()?;
+    if log_data.no_channels == 0 || log_data.sample_rate == 0 {
         return Ok(());
     }
 
     let buf_size = 1024 * 1024 * 4;
 
-    match std::fs::create_dir(format!("session_{}", session_str)) {
+    match std::fs::create_dir(format!("session_{}", log_data.session_str)) {
         Ok(_) => (),
         Err(_) => {
             println!("please remove existing folder");
@@ -106,23 +94,23 @@ pub fn extract_session() -> io::Result<()> {
     }
 
     let mut waves = create_waves(
-        &format!("session_{}", session_str),
-        total_length,
-        sample_rate,
-        no_channels,
+        &format!("session_{}", log_data.session_str),
+        log_data.total_length,
+        log_data.sample_rate,
+        log_data.no_channels,
     )?;
     println!("Unpacking audio data, this may take a while :) \n");
 
     let mut take = Vec::new();
-    for i in 0..no_takes {
-        open_take(i as usize, &mut take, &take_size)?;
+    for i in 0..log_data.no_takes {
+        open_take(i as usize, &mut take, &log_data.take_size)?;
 
-        take[i as usize].seek(io::SeekFrom::Start(32 * 1024))?;
+        take[i as usize].seek(SeekFrom::Start(32 * 1024))?;
         read_write_audio(
             &mut take[i as usize],
-            take_size[i as usize],
+            log_data.take_size[i as usize],
             buf_size,
-            no_channels,
+            log_data.no_channels,
             &mut waves,
         )?;
     }
@@ -140,28 +128,17 @@ pub fn extract_session() -> io::Result<()> {
     Ok(())
 }
 
-pub fn extract_channel(channel_no: u32) -> io::Result<()> {
+pub fn extract_channel(channel_no: u32) -> Result<()> {
     let start = Instant::now();
 
-    let (
-        session_str,
-        _session_no,
-        no_channels,
-        sample_rate,
-        _date_code,
-        no_takes,
-        _no_markers,
-        total_length,
-        take_size,
-        _take_markers,
-    ) = read_log_file()?;
-    if no_channels == 0 || sample_rate == 0 {
+    let log_data = read_log_file()?;
+    if log_data.no_channels == 0 || log_data.sample_rate == 0 {
         return Ok(());
     }
 
     let buf_size = 1024 * 1024 * 4;
 
-    match std::fs::create_dir(format!("channel_{}_{}", channel_no, session_str)) {
+    match std::fs::create_dir(format!("channel_{}_{}", channel_no, log_data.session_str)) {
         Ok(_) => (),
         Err(_) => {
             println!("please remove existing folder");
@@ -170,23 +147,23 @@ pub fn extract_channel(channel_no: u32) -> io::Result<()> {
     }
 
     let mut wave = create_wave(
-        &format!("channel_{}_{}", channel_no, session_str),
-        total_length,
-        sample_rate,
+        &format!("channel_{}_{}", channel_no, log_data.session_str),
+        log_data.total_length,
+        log_data.sample_rate,
         channel_no,
     )?;
     println!("Unpacking audio data, this may take a while :) \n");
 
     let mut take = Vec::new();
-    for i in 0..no_takes {
-        open_take(i as usize, &mut take, &take_size)?;
+    for i in 0..log_data.no_takes {
+        open_take(i as usize, &mut take, &log_data.take_size)?;
 
-        take[i as usize].seek(io::SeekFrom::Start(32 * 1024))?;
+        take[i as usize].seek(SeekFrom::Start(32 * 1024))?;
         read_write_audio_ch(
             &mut take[i as usize],
-            take_size[i as usize],
+            log_data.take_size[i as usize],
             buf_size,
-            no_channels,
+            log_data.no_channels,
             &mut wave,
             channel_no,
         )?;
@@ -205,29 +182,18 @@ pub fn extract_channel(channel_no: u32) -> io::Result<()> {
     Ok(())
 }
 
-pub fn extract_session_marker(start_marker: u32, stop_marker: u32) -> io::Result<()> {
+pub fn extract_session_marker(start_marker: u32, stop_marker: u32) -> Result<()> {
     let start = Instant::now();
 
-    let (
-        session_str,
-        _session_no,
-        no_channels,
-        sample_rate,
-        _date_code,
-        no_takes,
-        _no_markers,
-        total_length,
-        take_size,
-        take_markers,
-    ) = read_log_file()?;
-    if no_channels == 0 || sample_rate == 0 {
+    let log_data = read_log_file()?;
+    if log_data.no_channels == 0 || log_data.sample_rate == 0 {
         return Ok(());
     }
 
     let buf_size = 1024 * 1024 * 4;
     let folder_name = format!(
         "session_marker_{}_{}_{}",
-        start_marker, stop_marker, session_str
+        start_marker, stop_marker, log_data.session_str
     );
 
     match std::fs::create_dir(&folder_name) {
@@ -238,28 +204,30 @@ pub fn extract_session_marker(start_marker: u32, stop_marker: u32) -> io::Result
         }
     }
 
-    let mut waves = create_waves(&folder_name, total_length, sample_rate, no_channels)?;
+    let mut waves = create_waves(
+        &folder_name,
+        log_data.total_length,
+        log_data.sample_rate,
+        log_data.no_channels,
+    )?;
     println!("Unpacking audio data, this may take a while :) \n");
 
     let (start_take, end_take, s_time_x_ch, e_time_x_ch) = calc_limits_marker(
         start_marker.try_into().unwrap(),
         stop_marker.try_into().unwrap(),
-        no_takes,
-        &take_size,
-        &take_markers,
-        no_channels,
+        &log_data,
     );
 
     let mut take = Vec::new();
     for i in start_take..=end_take {
-        open_take(i as usize, &mut take, &take_size)?;
+        open_take(i as usize, &mut take, &log_data.take_size)?;
 
-        take[i as usize].seek(io::SeekFrom::Start(32 * 1024))?;
+        take[i as usize].seek(SeekFrom::Start(32 * 1024))?;
         let l_takesize = calc_take_len(
             i,
             start_take,
-            &mut take, // Change this line to pass a mutable reference
-            &take_size,
+            &mut take,
+            &log_data.take_size,
             end_take,
             s_time_x_ch,
             e_time_x_ch,
@@ -268,7 +236,7 @@ pub fn extract_session_marker(start_marker: u32, stop_marker: u32) -> io::Result
             &mut take[i as usize],
             l_takesize,
             buf_size,
-            no_channels,
+            log_data.no_channels,
             &mut waves,
         )?;
     }
@@ -286,33 +254,18 @@ pub fn extract_session_marker(start_marker: u32, stop_marker: u32) -> io::Result
     Ok(())
 }
 
-pub fn extract_channel_marker(
-    channel_no: u32,
-    start_marker: u32,
-    stop_marker: u32,
-) -> io::Result<()> {
+pub fn extract_channel_marker(channel_no: u32, start_marker: u32, stop_marker: u32) -> Result<()> {
     let start = Instant::now();
 
-    let (
-        session_str,
-        _session_no,
-        no_channels,
-        sample_rate,
-        _date_code,
-        no_takes,
-        _no_markers,
-        total_length,
-        take_size,
-        take_markers,
-    ) = read_log_file()?;
-    if no_channels == 0 || sample_rate == 0 {
+    let log_data = read_log_file()?;
+    if log_data.no_channels == 0 || log_data.sample_rate == 0 {
         return Ok(());
     }
 
     let buf_size = 1024 * 1024 * 4;
     let folder_name = format!(
         "channel_marker_{}_{}_{}_{}",
-        start_marker, stop_marker, channel_no, session_str
+        start_marker, stop_marker, channel_no, log_data.session_str
     );
 
     match std::fs::create_dir(&folder_name) {
@@ -323,28 +276,30 @@ pub fn extract_channel_marker(
         }
     }
 
-    let mut wave = create_wave(&folder_name, total_length, sample_rate, channel_no)?;
+    let mut wave = create_wave(
+        &folder_name,
+        log_data.total_length,
+        log_data.sample_rate,
+        channel_no,
+    )?;
     println!("Unpacking audio data, this may take a while :) \n");
 
     let (start_take, end_take, s_time_x_ch, e_time_x_ch) = calc_limits_marker(
         start_marker.try_into().unwrap(),
         stop_marker.try_into().unwrap(),
-        no_takes,
-        &take_size,
-        &take_markers,
-        no_channels,
+        &log_data,
     );
 
     let mut take = Vec::new();
     for i in start_take..=end_take {
-        open_take(i as usize, &mut take, &take_size)?;
+        open_take(i as usize, &mut take, &log_data.take_size)?;
 
-        take[i as usize].seek(io::SeekFrom::Start(32 * 1024))?;
+        take[i as usize].seek(SeekFrom::Start(32 * 1024))?;
         let l_takesize = calc_take_len(
             i,
             start_take,
-            &mut take, // Change this line to pass a mutable reference
-            &take_size,
+            &mut take,
+            &log_data.take_size,
             end_take,
             s_time_x_ch,
             e_time_x_ch,
@@ -353,7 +308,7 @@ pub fn extract_channel_marker(
             &mut take[i as usize],
             l_takesize,
             buf_size,
-            no_channels,
+            log_data.no_channels,
             &mut wave,
             channel_no,
         )?;
@@ -372,27 +327,19 @@ pub fn extract_channel_marker(
     Ok(())
 }
 
-pub fn extract_session_time(start_time: u32, stop_time: u32) -> io::Result<()> {
+pub fn extract_session_time(start_time: u32, stop_time: u32) -> Result<()> {
     let start = Instant::now();
 
-    let (
-        session_str,
-        _session_no,
-        no_channels,
-        sample_rate,
-        _date_code,
-        no_takes,
-        _no_markers,
-        total_length,
-        take_size,
-        _take_markers,
-    ) = read_log_file()?;
-    if no_channels == 0 || sample_rate == 0 {
+    let log_data = read_log_file()?;
+    if log_data.no_channels == 0 || log_data.sample_rate == 0 {
         return Ok(());
     }
 
     let buf_size = 1024 * 1024 * 4;
-    let folder_name = format!("session_time_{}_{}_{}", start_time, stop_time, session_str);
+    let folder_name = format!(
+        "session_time_{}_{}_{}",
+        start_time, stop_time, log_data.session_str
+    );
 
     match std::fs::create_dir(&folder_name) {
         Ok(_) => (),
@@ -402,28 +349,27 @@ pub fn extract_session_time(start_time: u32, stop_time: u32) -> io::Result<()> {
         }
     }
 
-    let mut waves = create_waves(&folder_name, total_length, sample_rate, no_channels)?;
+    let mut waves = create_waves(
+        &folder_name,
+        log_data.total_length,
+        log_data.sample_rate,
+        log_data.no_channels,
+    )?;
     println!("Unpacking audio data, this may take a while :) \n");
 
-    let (start_take, end_take, s_time_x_ch, e_time_x_ch) = calc_limits_time(
-        start_time,
-        stop_time,
-        no_takes,
-        &take_size,
-        sample_rate,
-        no_channels,
-    );
+    let (start_take, end_take, s_time_x_ch, e_time_x_ch) =
+        calc_limits_time(start_time, stop_time, &log_data);
 
     let mut take = Vec::new();
     for i in start_take..=end_take {
-        open_take(i as usize, &mut take, &take_size)?;
+        open_take(i as usize, &mut take, &log_data.take_size)?;
 
-        take[i as usize].seek(io::SeekFrom::Start(32 * 1024))?;
+        take[i as usize].seek(SeekFrom::Start(32 * 1024))?;
         let l_takesize = calc_take_len(
             i,
             start_take,
-            &mut take, // Change this line to pass a mutable reference
-            &take_size,
+            &mut take,
+            &log_data.take_size,
             end_take,
             s_time_x_ch,
             e_time_x_ch,
@@ -432,7 +378,7 @@ pub fn extract_session_time(start_time: u32, stop_time: u32) -> io::Result<()> {
             &mut take[i as usize],
             l_takesize,
             buf_size,
-            no_channels,
+            log_data.no_channels,
             &mut waves,
         )?;
     }
@@ -450,29 +396,18 @@ pub fn extract_session_time(start_time: u32, stop_time: u32) -> io::Result<()> {
     Ok(())
 }
 
-pub fn extract_channel_time(channel_no: u32, start_time: u32, stop_time: u32) -> io::Result<()> {
+pub fn extract_channel_time(channel_no: u32, start_time: u32, stop_time: u32) -> Result<()> {
     let start = Instant::now();
 
-    let (
-        session_str,
-        _session_no,
-        no_channels,
-        sample_rate,
-        _date_code,
-        no_takes,
-        _no_markers,
-        total_length,
-        take_size,
-        _take_markers,
-    ) = read_log_file()?;
-    if no_channels == 0 || sample_rate == 0 {
+    let log_data = read_log_file()?;
+    if log_data.no_channels == 0 || log_data.sample_rate == 0 {
         return Ok(());
     }
 
     let buf_size = 1024 * 1024 * 4;
     let folder_name = format!(
         "channel_time_{}_{}_{}_{}",
-        start_time, stop_time, channel_no, session_str
+        start_time, stop_time, channel_no, log_data.session_str
     );
 
     match std::fs::create_dir(&folder_name) {
@@ -483,28 +418,27 @@ pub fn extract_channel_time(channel_no: u32, start_time: u32, stop_time: u32) ->
         }
     }
 
-    let mut wave = create_wave(&folder_name, total_length, sample_rate, channel_no)?;
+    let mut wave = create_wave(
+        &folder_name,
+        log_data.total_length,
+        log_data.sample_rate,
+        channel_no,
+    )?;
     println!("Unpacking audio data, this may take a while :) \n");
 
-    let (start_take, end_take, s_time_x_ch, e_time_x_ch) = calc_limits_time(
-        start_time,
-        stop_time,
-        no_takes,
-        &take_size,
-        sample_rate,
-        no_channels,
-    );
+    let (start_take, end_take, s_time_x_ch, e_time_x_ch) =
+        calc_limits_time(start_time, stop_time, &log_data);
 
     let mut take = Vec::new();
     for i in start_take..=end_take {
-        open_take(i as usize, &mut take, &take_size)?;
+        open_take(i as usize, &mut take, &log_data.take_size)?;
 
-        take[i as usize].seek(io::SeekFrom::Start(32 * 1024))?;
+        take[i as usize].seek(SeekFrom::Start(32 * 1024))?;
         let l_takesize = calc_take_len(
             i,
             start_take,
-            &mut take, // Change this line to pass a mutable reference
-            &take_size,
+            &mut take,
+            &log_data.take_size,
             end_take,
             s_time_x_ch,
             e_time_x_ch,
@@ -513,7 +447,7 @@ pub fn extract_channel_time(channel_no: u32, start_time: u32, stop_time: u32) ->
             &mut take[i as usize],
             l_takesize,
             buf_size,
-            no_channels,
+            log_data.no_channels,
             &mut wave,
             channel_no,
         )?;
