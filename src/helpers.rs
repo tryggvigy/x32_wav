@@ -1,96 +1,52 @@
 use std::fs::File;
-use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::io::{Read, Result, Seek, SeekFrom, Write};
 
-pub fn read_log_file() -> io::Result<(
-    String,
-    u32,
-    u32,
-    u32,
-    u32,
-    u32,
-    u32,
-    u32,
-    Vec<u32>,
-    Vec<u32>,
-)> {
+pub struct LogData {
+    pub session_str: String,
+    pub session_no: u32,
+    pub no_channels: u32,
+    pub sample_rate: u32,
+    pub date_code: u32,
+    pub no_takes: u32,
+    pub no_markers: u32,
+    pub total_length: u32,
+    pub take_size: Vec<u32>,
+    pub take_markers: Vec<u32>,
+}
+
+pub fn read_log_file() -> Result<LogData> {
     let mut log = File::open("se_log.bin")?;
     let mut buffer = [0; 4];
 
-    log.read_exact(&mut buffer)?;
+    let read_u32 = |log: &mut File, buffer: &mut [u8; 4]| -> Result<u32> {
+        log.read_exact(buffer)?;
+        Ok(u32::from_str_radix(
+            &hex::encode(buffer.iter().rev().cloned().collect::<Vec<u8>>()),
+            16,
+        )
+        .unwrap())
+    };
+
     let session_str = hex::encode(buffer.iter().rev().cloned().collect::<Vec<u8>>());
-    let session_no = u32::from_str_radix(&session_str, 16).unwrap();
+    let session_no = read_u32(&mut log, &mut buffer)?;
+    let no_channels = read_u32(&mut log, &mut buffer)?;
+    let sample_rate = read_u32(&mut log, &mut buffer)?;
+    let date_code = read_u32(&mut log, &mut buffer)?;
+    let no_takes = read_u32(&mut log, &mut buffer)?;
+    let no_markers = read_u32(&mut log, &mut buffer)?;
+    let total_length = read_u32(&mut log, &mut buffer)?;
 
-    log.read_exact(&mut buffer)?;
-    let no_channels = u32::from_str_radix(
-        &hex::encode(buffer.iter().rev().cloned().collect::<Vec<u8>>()),
-        16,
-    )
-    .unwrap();
-
-    log.read_exact(&mut buffer)?;
-    let sample_rate = u32::from_str_radix(
-        &hex::encode(buffer.iter().rev().cloned().collect::<Vec<u8>>()),
-        16,
-    )
-    .unwrap();
-
-    log.read_exact(&mut buffer)?;
-    let date_code = u32::from_str_radix(
-        &hex::encode(buffer.iter().rev().cloned().collect::<Vec<u8>>()),
-        16,
-    )
-    .unwrap();
-
-    log.read_exact(&mut buffer)?;
-    let no_takes = u32::from_str_radix(
-        &hex::encode(buffer.iter().rev().cloned().collect::<Vec<u8>>()),
-        16,
-    )
-    .unwrap();
-
-    log.read_exact(&mut buffer)?;
-    let no_markers = u32::from_str_radix(
-        &hex::encode(buffer.iter().rev().cloned().collect::<Vec<u8>>()),
-        16,
-    )
-    .unwrap();
-
-    log.read_exact(&mut buffer)?;
-    let total_length = u32::from_str_radix(
-        &hex::encode(buffer.iter().rev().cloned().collect::<Vec<u8>>()),
-        16,
-    )
-    .unwrap();
-
-    let mut take_size = Vec::new();
-    for _ in 0..no_takes {
-        log.read_exact(&mut buffer)?;
-        take_size.push(
-            u32::from_str_radix(
-                &hex::encode(buffer.iter().rev().cloned().collect::<Vec<u8>>()),
-                16,
-            )
-            .unwrap(),
-        );
-    }
-
+    let take_size: Vec<u32> = (0..no_takes)
+        .map(|_| read_u32(&mut log, &mut buffer))
+        .collect::<Result<_>>()?;
     for _ in 0..(256 - no_takes) {
         log.read_exact(&mut buffer)?;
     }
+    let take_markers: Vec<u32> = (0..no_markers)
+        .map(|_| read_u32(&mut log, &mut buffer))
+        .collect::<Result<_>>()?;
 
-    let mut take_markers = Vec::new();
-    for _ in 0..no_markers {
-        log.read_exact(&mut buffer)?;
-        take_markers.push(
-            u32::from_str_radix(
-                &hex::encode(buffer.iter().rev().cloned().collect::<Vec<u8>>()),
-                16,
-            )
-            .unwrap(),
-        );
-    }
-
-    Ok((
+    Ok(LogData {
         session_str,
         session_no,
         no_channels,
@@ -101,7 +57,7 @@ pub fn read_log_file() -> io::Result<(
         total_length,
         take_size,
         take_markers,
-    ))
+    })
 }
 
 pub fn create_waves(
@@ -109,7 +65,7 @@ pub fn create_waves(
     no_samples: u32,
     sample_rate: u32,
     no_waves: u32,
-) -> io::Result<Vec<File>> {
+) -> Result<Vec<File>> {
     let bytes_datachunk = no_samples * 3;
     let mut channels = Vec::new();
 
@@ -134,7 +90,7 @@ pub fn create_waves(
     Ok(channels)
 }
 
-pub fn close_waves(waves: Vec<File>) -> io::Result<()> {
+pub fn close_waves(waves: Vec<File>) -> Result<()> {
     for wave in waves {
         wave.sync_all()?;
     }
@@ -146,7 +102,7 @@ pub fn create_wave(
     no_samples: u32,
     sample_rate: u32,
     ch_number: u32,
-) -> io::Result<File> {
+) -> Result<File> {
     let bytes_datachunk = no_samples * 3;
     let path = format!("{}/ch_{}.wav", folder, ch_number);
     let mut file = File::create(&path)?;
@@ -171,7 +127,7 @@ pub fn read_write_audio(
     bufsize: usize,
     no_channels: u32,
     waves_to: &mut Vec<File>,
-) -> io::Result<()> {
+) -> Result<()> {
     let mut read_buf = vec![0; bufsize];
     for _ in 0..(takesize * 4 / bufsize as u32) {
         take.read_exact(&mut read_buf)?;
@@ -207,7 +163,7 @@ pub fn read_write_audio_ch(
     no_channels: u32,
     wave_to: &mut File,
     channel_no: u32,
-) -> io::Result<()> {
+) -> Result<()> {
     let mut read_buf = vec![0; bufsize];
     for _ in 0..(takesize * 4 / bufsize as u32) {
         take.read_exact(&mut read_buf)?;
@@ -236,11 +192,11 @@ pub fn calc_take_len(
     i: usize,
     start_take: usize,
     take: &mut Vec<File>,
-    take_size: &Vec<u32>,
+    take_size: &[u32],
     end_take: usize,
     s_time_x_ch: u32,
     e_time_x_ch: u32,
-) -> io::Result<u32> {
+) -> Result<u32> {
     let l_takesize = if i == start_take {
         take[i].seek(SeekFrom::Current((s_time_x_ch * 4) as i64))?;
         if i == end_take {
@@ -257,15 +213,8 @@ pub fn calc_take_len(
     Ok(l_takesize)
 }
 
-pub fn open_take(i: usize, take: &mut Vec<File>, take_size: &Vec<u32>) -> io::Result<()> {
-    let filename = if i + 1 < 10 {
-        format!("0000000{}.wav", i + 1)
-    } else if i + 1 < 100 {
-        format!("000000{}.wav", i + 1)
-    } else {
-        format!("00000{}.wav", i + 1)
-    };
-
+pub fn open_take(i: usize, take: &mut Vec<File>, take_size: &[u32]) -> Result<()> {
+    let filename = format!("{:08}.wav", i + 1);
     let file = File::open(&filename)?;
     println!("reading take {} \n", i + 1);
     println!("take length {} \n", take_size[i]);
@@ -277,25 +226,22 @@ pub fn open_take(i: usize, take: &mut Vec<File>, take_size: &Vec<u32>) -> io::Re
 pub fn calc_limits_time(
     start_time: u32,
     stop_time: u32,
-    no_takes: u32,
-    take_size: &Vec<u32>,
-    sample_rate: u32,
-    no_channels: u32,
+    log_data: &LogData,
 ) -> (usize, usize, u32, u32) {
-    let s_time_x_ch = start_time * sample_rate * no_channels;
+    let s_time_x_ch = start_time * log_data.sample_rate * log_data.no_channels;
     let mut time_compare = 0;
-    let start_take = (0..no_takes)
+    let start_take = (0..log_data.no_takes)
         .find(|&i| {
-            time_compare += take_size[i as usize];
+            time_compare += log_data.take_size[i as usize];
             s_time_x_ch < time_compare
         })
         .unwrap_or(0) as usize;
 
-    let e_time_x_ch = stop_time * sample_rate * no_channels;
+    let e_time_x_ch = stop_time * log_data.sample_rate * log_data.no_channels;
     time_compare = 0;
-    let end_take = (0..no_takes)
+    let end_take = (0..log_data.no_takes)
         .find(|&i| {
-            time_compare += take_size[i as usize];
+            time_compare += log_data.take_size[i as usize];
             e_time_x_ch < time_compare
         })
         .unwrap_or(0) as usize;
@@ -306,58 +252,25 @@ pub fn calc_limits_time(
 pub fn calc_limits_marker(
     start_marker: usize,
     stop_marker: usize,
-    no_takes: u32,
-    take_size: &Vec<u32>,
-    take_markers: &Vec<u32>,
-    no_channels: u32,
+    log_data: &LogData,
 ) -> (usize, usize, u32, u32) {
-    let s_time_x_ch = take_markers[start_marker] * no_channels;
+    let s_time_x_ch = log_data.take_markers[start_marker] * log_data.no_channels;
     let mut time_compare = 0;
-    let start_take = (0..no_takes)
+    let start_take = (0..log_data.no_takes)
         .find(|&i| {
-            time_compare += take_size[i as usize];
+            time_compare += log_data.take_size[i as usize];
             s_time_x_ch < time_compare
         })
         .unwrap_or(0) as usize;
 
-    let e_time_x_ch = take_markers[stop_marker] * no_channels;
+    let e_time_x_ch = log_data.take_markers[stop_marker] * log_data.no_channels;
     time_compare = 0;
-    let end_take = (0..no_takes)
+    let end_take = (0..log_data.no_takes)
         .find(|&i| {
-            time_compare += take_size[i as usize];
+            time_compare += log_data.take_size[i as usize];
             e_time_x_ch < time_compare
         })
         .unwrap_or(0) as usize;
 
     (start_take, end_take, s_time_x_ch, e_time_x_ch)
-}
-
-pub fn create_header(
-    folder: &str,
-    no_samples: u32,
-    no_channels: u32,
-    sample_rate: u32,
-    session_no_str: &str,
-) -> io::Result<File> {
-    let size = no_samples * 4 * no_channels;
-    let path = format!("{}/session{}.wav", folder, session_no_str);
-    let mut file = File::create(&path)?;
-    file.write_all(b"RIFF")?;
-    file.write_all(&u32::to_le_bytes(size + 44 + 460))?;
-    file.write_all(b"WAVEfmt ")?;
-    file.write_all(&u32::to_le_bytes(16))?;
-    file.write_all(&u16::to_le_bytes(1))?;
-    file.write_all(&u16::to_le_bytes(no_channels as u16))?;
-    file.write_all(&u32::to_le_bytes(sample_rate))?;
-    file.write_all(&u32::to_le_bytes(sample_rate * no_channels * 4))?;
-    file.write_all(&u16::to_le_bytes((no_channels * 4) as u16))?;
-    file.write_all(&u16::to_le_bytes(32))?;
-    file.write_all(b"JUNK")?;
-    file.write_all(&u32::to_le_bytes(460))?;
-    for _ in 0..460 {
-        file.write_all(b" ")?;
-    }
-    file.write_all(b"data")?;
-    file.write_all(&u32::to_le_bytes(size))?;
-    Ok(file)
 }
