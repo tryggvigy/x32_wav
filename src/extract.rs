@@ -85,12 +85,10 @@ pub fn extract_session() -> Result<()> {
 
     let buf_size = 1024 * 1024 * 4;
 
-    match std::fs::create_dir(format!("session_{}", log_data.session_str)) {
-        Ok(_) => (),
-        Err(_) => {
-            println!("please remove existing folder");
-            return Ok(());
-        }
+    let folder_name = format!("session_{}", log_data.session_str);
+    if let Err(e) = std::fs::create_dir(&folder_name) {
+        eprintln!("Error creating folder '{}': {}", folder_name, e);
+        return Err(e);
     }
 
     let mut waves = create_waves(
@@ -138,12 +136,10 @@ pub fn extract_channel(channel_no: u32) -> Result<()> {
 
     let buf_size = 1024 * 1024 * 4;
 
-    match std::fs::create_dir(format!("channel_{}_{}", channel_no, log_data.session_str)) {
-        Ok(_) => (),
-        Err(_) => {
-            println!("please remove existing folder");
-            return Ok(());
-        }
+    let folder_name = format!("channel_{}_{}", channel_no, log_data.session_str);
+    if let Err(e) = std::fs::create_dir(&folder_name) {
+        eprintln!("Error creating folder '{}': {}", folder_name, e);
+        return Err(e);
     }
 
     let mut wave = create_wave(
@@ -196,12 +192,9 @@ pub fn extract_session_marker(start_marker: u32, stop_marker: u32) -> Result<()>
         start_marker, stop_marker, log_data.session_str
     );
 
-    match std::fs::create_dir(&folder_name) {
-        Ok(_) => (),
-        Err(_) => {
-            println!("please remove existing folder");
-            return Ok(());
-        }
+    if let Err(e) = std::fs::create_dir(&folder_name) {
+        eprintln!("Error creating folder '{}': {}", folder_name, e);
+        return Err(e);
     }
 
     let mut waves = create_waves(
@@ -268,12 +261,9 @@ pub fn extract_channel_marker(channel_no: u32, start_marker: u32, stop_marker: u
         start_marker, stop_marker, channel_no, log_data.session_str
     );
 
-    match std::fs::create_dir(&folder_name) {
-        Ok(_) => (),
-        Err(_) => {
-            println!("please remove existing folder");
-            return Ok(());
-        }
+    if let Err(e) = std::fs::create_dir(&folder_name) {
+        eprintln!("Error creating folder '{}': {}", folder_name, e);
+        return Err(e);
     }
 
     let mut wave = create_wave(
@@ -341,12 +331,9 @@ pub fn extract_session_time(start_time: u32, stop_time: u32) -> Result<()> {
         start_time, stop_time, log_data.session_str
     );
 
-    match std::fs::create_dir(&folder_name) {
-        Ok(_) => (),
-        Err(_) => {
-            println!("please remove existing folder");
-            return Ok(());
-        }
+    if let Err(e) = std::fs::create_dir(&folder_name) {
+        eprintln!("Error creating folder '{}': {}", folder_name, e);
+        return Err(e);
     }
 
     let mut waves = create_waves(
@@ -410,12 +397,9 @@ pub fn extract_channel_time(channel_no: u32, start_time: u32, stop_time: u32) ->
         start_time, stop_time, channel_no, log_data.session_str
     );
 
-    match std::fs::create_dir(&folder_name) {
-        Ok(_) => (),
-        Err(_) => {
-            println!("please remove existing folder");
-            return Ok(());
-        }
+    if let Err(e) = std::fs::create_dir(&folder_name) {
+        eprintln!("Error creating folder '{}': {}", folder_name, e);
+        return Err(e);
     }
 
     let mut wave = create_wave(
