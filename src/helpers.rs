@@ -15,7 +15,7 @@ pub struct LogData {
 }
 
 pub fn read_log_file() -> Result<LogData> {
-    let mut log = File::open("se_log.bin")?;
+    let mut log = File::open("SE_LOG.BIN")?;
     let mut buffer = [0; 4];
 
     let read_u32 = |log: &mut File, buffer: &mut [u8; 4]| -> Result<u32> {
@@ -214,7 +214,7 @@ pub fn calc_take_len(
 }
 
 pub fn open_take(i: usize, take: &mut Vec<File>, take_size: &[u32]) -> Result<()> {
-    let filename = format!("{:08}.wav", i + 1);
+    let filename = format!("{:08}.WAV", i + 1);
     let file = File::open(&filename)?;
     println!("reading take {} \n", i + 1);
     println!("take length {} \n", take_size[i]);

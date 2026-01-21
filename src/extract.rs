@@ -5,7 +5,7 @@ use std::time::Instant;
 
 // TODO not working properly
 pub fn name_session(name_str: &str) -> Result<()> {
-    let mut log = if let Ok(file) = File::open("se_log.bin") {
+    let mut log = if let Ok(file) = File::open("SE_LOG.BIN") {
         file
     } else {
         println!("log file not found!");
@@ -30,7 +30,7 @@ pub fn name_session(name_str: &str) -> Result<()> {
     // null terminate the string
     log_copy_l[name_p + 19] = 0;
 
-    let mut log = OpenOptions::new().write(true).open("se_log.bin")?;
+    let mut log = OpenOptions::new().write(true).open("SE_LOG.BIN")?;
     log.write_all(&log_copy_l)?;
     println!("Session named successfully!");
     Ok(())
