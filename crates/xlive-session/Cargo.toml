@@ -1,0 +1,7 @@
+[package]
+name = "xlive-session"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+pcm-wav = { path = "../pcm-wav" }
